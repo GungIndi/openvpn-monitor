@@ -8,6 +8,15 @@ maps_height=500
 geoip_data=/usr/share/GeoIP/GeoLite2-City.mmdb
 datetime_format=%d/%m/%Y %H:%M:%S
 
+# DNS Query Logging (requires dnsmasq)
+#enable_dns_logs=True
+#dns_log_file=/var/log/dnsmasq/vpn.log
+#dns_log_hours=24
+#dns_log_limit=500
+
+# OpenVPN IPP file for static IP mapping (optional)
+#ipp_path=/usr/local/etc/openvpn/ipp.txt
+
 [VPN1]
 host=localhost
 port=5555

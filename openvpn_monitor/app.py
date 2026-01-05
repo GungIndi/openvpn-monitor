@@ -34,6 +34,8 @@ from vpns.openvpn.data_collector import VPNDataCollector  # noqa
 from vpns.openvpn.disconnector import VPNDisconnector     # noqa
 from location_data.maxmind.geoip import GeoipDBLoader     # noqa
 from util import is_truthy                                # noqa
+from util.dnsmasq_parser import parse_dnsmasq_log, group_queries_by_ip, get_query_stats  # noqa
+from util.ipp_parser import parse_ipp_file  # noqa
 
 logging.basicConfig(stream=sys.stderr, format='[%(asctime)s] [%(process)d] [%(levelname)s] %(message)s')
 logging.getLogger().setLevel(logging.INFO)
@@ -157,6 +159,10 @@ def openvpn_monitor_wsgi():
         latitude = settings.get('latitude', 40.72)
         longitude = settings.get('longitude', -74)
         datetime_format = settings.get('datetime_format', '%d/%m/%Y %H:%M:%S')
+        enable_dns_logs = is_truthy(settings.get('enable_dns_logs', False))
+        dns_log_file = settings.get('dns_log_file', '/var/log/dnsmasq/vpn.log')
+        dns_log_hours = int(settings.get('dns_log_hours', 24))
+        dns_log_limit = int(settings.get('dns_log_limit', 500))
         return dict(
             site=site,
             logo=logo,
@@ -165,6 +171,10 @@ def openvpn_monitor_wsgi():
             latitude=latitude,
             longitude=longitude,
             datetime_format=datetime_format,
+            enable_dns_logs=enable_dns_logs,
+            dns_log_file=dns_log_file,
+            dns_log_hours=dns_log_hours,
+            dns_log_limit=dns_log_limit,
         )
 
     @app.route('/images/logo', methods=['GET'])
@@ -190,8 +200,33 @@ def openvpn_monitor_wsgi():
         vpns = vpn_data.vpns.items()
         pretty_vpns = pformat((dict(vpns)))
         logging.debug(f'=== begin vpns\n{pretty_vpns}\n=== end vpns')
+        
+        # Parse DNS logs if enabled
+        dns_by_ip = {}
+        dns_stats = None
+        enable_dns_logs = is_truthy(settings.get('enable_dns_logs', False))
+        if enable_dns_logs:
+            dns_log_file = settings.get('dns_log_file', '/var/log/dnsmasq/vpn.log')
+            dns_log_hours = int(settings.get('dns_log_hours', 24))
+            dns_log_limit = int(settings.get('dns_log_limit', 500))
+            ipp_path = settings.get('ipp_path', '/usr/local/etc/openvpn/ipp.txt')
+            
+            static_ip_map = parse_ipp_file(ipp_path)
+            
+            try:
+                queries = parse_dnsmasq_log(dns_log_file, limit=dns_log_limit, hours=dns_log_hours)
+                dns_by_ip = group_queries_by_ip(queries)
+                dns_stats = get_query_stats(queries)
+                logging.info(f'Parsed {len(queries)} DNS queries from {len(dns_by_ip)} clients')
+            except Exception as e:
+                logging.error(f'Error parsing DNS logs: {e}')
+        else:
+            dns_by_ip = {}
+            dns_stats = None
+            static_ip_map = {}
+        
         if request.method == 'GET':
-            return render_template('base.html', vpns=vpns)
+            return render_template('base.html', vpns=vpns, dns_by_ip=dns_by_ip, dns_stats=dns_stats, static_ip_map=static_ip_map)
         elif request.method == 'POST':
             vpn_id = request.form.get('vpn_id')
             ip = request.form.get('ip')
@@ -204,7 +239,7 @@ def openvpn_monitor_wsgi():
                 port=port,
                 client_id=client_id,
             )
-            return render_template('base.html', vpns=vpns)
+            return render_template('base.html', vpns=vpns, dns_by_ip=dns_by_ip, dns_stats=dns_stats, static_ip_map=static_ip_map)
 
     return app
 

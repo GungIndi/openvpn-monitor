@@ -61,7 +61,11 @@ class ConfigLoader(object):
         self.settings = {'site': 'Default Site',
                          'enable_maps': False,
                          'geoip_data': '/usr/share/GeoIP/GeoLite2-City.mmdb',
-                         'datetime_format': '%d/%m/%Y %H:%M:%S'}
+                         'datetime_format': '%d/%m/%Y %H:%M:%S',
+                         'enable_dns_logs': False,
+                         'dns_log_file': '/var/log/dnsmasq/vpn.log',
+                         'dns_log_hours': 24,
+                         'dns_log_limit': 500}
         self.vpns['Default VPN'] = {'name': 'default',
                                     'host': 'localhost',
                                     'port': '5555',
@@ -80,7 +84,11 @@ class ConfigLoader(object):
             'enable_maps',
             'maps_height',
             'geoip_data',
-            'datetime_format'
+            'datetime_format',
+            'enable_dns_logs',
+            'dns_log_file',
+            'dns_log_hours',
+            'dns_log_limit'
         ]
         for var in global_vars:
             try:

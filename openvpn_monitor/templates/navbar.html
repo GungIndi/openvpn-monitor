@@ -1,4 +1,4 @@
-<nav class="navbar navbar-inverse">
+<nav class="navbar navbar-default">
   <div class="container-fluid">
     <div class="navbar-header">
       <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#myNavbar">
@@ -20,7 +20,8 @@
           {% endfor %}
         </ul>
       </li>
-      {% if maps %}<li><a href="#map_canvas">Map View</a></li>{% endif %}
+      {% if enable_maps %}<li><a href="#map_canvas">Map View</a></li>{% endif %}
+      {% if enable_dns_logs %}<li><a href="#dns-queries">DNS Queries</a></li>{% endif %}
     </ul>
       {% if logo %}
         <a href="#" class="pull-right">

@@ -9,3 +9,11 @@ tmp*
 .svn
 .tox
 *.egg-info/
+.venv
+*.mmdb
+yarn.lock
+dist/*
+openvpn_monitor/static/dist/*
+openvpn_monitor/static/images/chronicle.jpg
+openvpn_monitor/openvpn-monitor.conf
+.gitignore

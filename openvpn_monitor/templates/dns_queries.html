@@ -1,0 +1,487 @@
+{% if enable_dns_logs %}
+<div id="dns-queries" class="panel panel-primary">
+  <div class="panel-heading">
+    <h3 class="panel-title">
+      <span class="glyphicon glyphicon-search"></span> DNS Queries
+      {% if dns_stats %}
+        <small>(<span id="stats-total-queries">{{ dns_stats.total_queries }}</span> queries from <span id="stats-unique-clients">{{ dns_stats.unique_clients }}</span> clients)</small>
+      {% endif %}
+    </h3>
+  </div>
+  <div class="panel-body">
+      <!-- Query Type Filter -->
+      <div class="col-md-6">
+        <label style="margin-right: 10px;font-weight: 600;">Query Type:</label>
+        <div class="btn-group" role="group">
+          <button type="button" class="btn btn-sm btn-primary active" data-filter="all">All</button>
+          <button type="button" class="btn btn-sm btn-default" data-filter="a-only">A Only</button>
+          <button type="button" class="btn btn-sm btn-default" data-filter="aaaa-only">AAAA Only</button>
+        </div>
+      </div>
+      
+      <!-- Date Range Filter -->
+      <div class="col-md-6">
+        <label style="margin-right: 10px; font-weight: 600;">Date Range:</label>
+        <div class="btn-group" role="group">
+          <button type="button" class="btn btn-sm btn-primary active" data-date-filter="all">All</button>
+          <button type="button" class="btn btn-sm btn-default" data-date-filter="today">Today</button>
+          <button type="button" class="btn btn-sm btn-default" data-date-filter="7days">Last 7 Days</button>
+          <button type="button" class="btn btn-sm btn-default" data-date-filter="30days">Last 30 Days</button>
+        </div>
+        <button type="button" class="btn btn-sm btn-default" id="custom-date-toggle" style="margin-left: 5px;">
+          <span class="glyphicon glyphicon-calendar"></span> Custom
+        </button>
+      </div>
+    </div>
+    
+    <!-- Custom Date Range Inputs -->
+    <div id="custom-date-range" style="display: none; margin-bottom: 15px; padding: 10px; background: #f8fafc; border-radius: 6px;">
+      <div class="row">
+        <div class="col-md-4">
+          <label>From Date:</label>
+          <input type="date" id="date-from" class="form-control input-sm">
+        </div>
+        <div class="col-md-4">
+          <label>To Date:</label>
+          <input type="date" id="date-to" class="form-control input-sm">
+        </div>
+        <div class="col-md-4">
+          <label>&nbsp;</label><br>
+          <button type="button" class="btn btn-sm btn-primary" id="apply-custom-date">Apply</button>
+          <button type="button" class="btn btn-sm btn-default" id="clear-custom-date">Clear</button>
+        </div>
+      </div>
+    </div>
+    
+   {# --- OPTIMIZATION STEP 1: Pre-calculate Active IPs (Run this once) --- #}
+{% set monitor = namespace(active_ips=[]) %}
+{% for _, vpn in vpns %}
+  {% if vpn.get('sessions') %}
+    {% for _, session in vpn.get('sessions').items() %}
+      {% if session.get('local_ip') %}
+        {% set monitor.active_ips = monitor.active_ips + [session.get('local_ip')|string] %}
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+{% endfor %}
+
+{# --- START OF DISPLAY --- #}
+{% if dns_by_ip %}
+  {% for client_ip, queries in dns_by_ip.items() %}
+    
+    <div class="panel panel-default dns-client-panel" data-client-ip="{{ client_ip }}">
+      <div class="panel-heading" role="tab" id="heading-{{ client_ip|replace('.', '-') }}">
+        <h4 class="panel-title">
+          <a role="button" data-toggle="collapse" href="#dns-{{ client_ip|replace('.', '-') }}" aria-expanded="false" aria-controls="dns-{{ client_ip|replace('.', '-') }}">
+            
+            {# 1. User Icon #}
+            <span class="glyphicon glyphicon-user"></span>
+            
+            {# 2. IP Address #}
+            <strong>{{ static_ip_map.get(client_ip) }}</strong>
+            <small class="text-muted">( {{ client_ip }} )</small>
+
+            {# 4. Active Badge (Instant Lookup from our pre-calculated list) #}
+            {% if client_ip in monitor.active_ips %}
+              <span class="label label-success">Active</span>
+            {% endif %}
+            
+            {# 5. Query Count #}
+            <span class="badge client-query-count pull-right">{{ queries|length }} queries</span>
+            
+          </a>
+        </h4>
+      </div>
+
+      <div id="dns-{{ client_ip|replace('.', '-') }}" class="panel-collapse collapse" role="tabpanel" aria-labelledby="heading-{{ client_ip|replace('.', '-') }}">
+        <div class="panel-body">
+          <table class="table table-striped table-condensed table-hover tablesorter dns-query-table">
+            <thead>
+              <tr>
+                <th>Date & Time</th>
+                <th>Type</th>
+                <th>Domain</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for query in queries %}
+              <tr data-query-type="{{ query.query_type }}" data-query-date="{{ query.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}">
+                <td style="white-space: nowrap;">{{ query.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                <td><span class="label label-info">{{ query.query_type }}</span></td>
+                <td><code>{{ query.domain }}</code></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          
+          <!-- Items Per Page Selector -->
+          <div class="items-per-page-selector" style="margin-top: 10px; text-align: right;">
+            <label style="font-size: 12px; margin-right: 5px;">Items per page:</label>
+            <select class="form-control input-sm items-per-page-select" style="display: inline-block; width: auto; font-size: 12px;">
+              <option value="10">10</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+              <option value="all">All</option>
+            </select>
+          </div>
+          
+          <!-- Pagination Controls -->
+          <div class="pagination-controls" style="margin-top: 15px; text-align: center; display: none;">
+            <button class="btn btn-sm btn-default pagination-prev" style="margin-right: 10px;">
+              <span class="glyphicon glyphicon-chevron-left"></span> Previous
+            </button>
+            <span class="pagination-info" style="margin: 0 15px; font-weight: 500;"></span>
+            <button class="btn btn-sm btn-default pagination-next" style="margin-left: 10px;">
+              Next <span class="glyphicon glyphicon-chevron-right"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+
+{% else %}
+  <div class="alert alert-info">
+    <span class="glyphicon glyphicon-info-sign"></span>
+    No DNS queries found in the last {{ dns_log_hours }} hours.
+  </div>
+{% endif %}
+  </div>
+</div>
+
+<script>
+// DNS Query Filters
+document.addEventListener('DOMContentLoaded', function() {
+  let currentTypeFilter = 'all';
+  let currentDateFilter = 'all';
+  let customDateFrom = null;
+  let customDateTo = null;
+  
+  // Pagination settings
+  const paginationState = new Map(); // Track current page for each client panel
+  const itemsPerPageState = new Map(); // Track items per page for each client panel
+  
+  const typeFilterButtons = document.querySelectorAll('[data-filter]');
+  const dateFilterButtons = document.querySelectorAll('[data-date-filter]');
+  const customDateToggle = document.getElementById('custom-date-toggle');
+  const customDateRange = document.getElementById('custom-date-range');
+  const dateFromInput = document.getElementById('date-from');
+  const dateToInput = document.getElementById('date-to');
+  const applyCustomBtn = document.getElementById('apply-custom-date');
+  const clearCustomBtn = document.getElementById('clear-custom-date');
+  
+  // Stats elements
+  const totalQueriesEl = document.getElementById('stats-total-queries');
+  const uniqueClientsEl = document.getElementById('stats-unique-clients');
+  
+  // Helper function to get items per page for a panel
+  function getItemsPerPage(clientIp) {
+    const itemsPerPage = itemsPerPageState.get(clientIp) || 50;
+    return itemsPerPage === 'all' ? Number.MAX_SAFE_INTEGER : parseInt(itemsPerPage);
+  }
+  
+  // Apply both filters
+  function applyFilters() {
+    let totalVisibleQueries = 0;
+    let visibleClientsSet = new Set();
+    
+    // Iterate through each client panel
+    document.querySelectorAll('.dns-client-panel').forEach(panel => {
+      const clientIp = panel.getAttribute('data-client-ip');
+      const rows = panel.querySelectorAll('tbody tr');
+      let clientVisibleQueries = 0;
+      
+      rows.forEach(row => {
+        const queryType = row.getAttribute('data-query-type');
+        const queryDate = row.getAttribute('data-query-date');
+        let show = true;
+        
+        // Type filter
+        if (currentTypeFilter === 'a-only') {
+          show = show && queryType === 'A';
+        } else if (currentTypeFilter === 'aaaa-only') {
+          show = show && queryType === 'AAAA';
+        }
+        
+        // Date filter
+        if (show && currentDateFilter !== 'all') {
+          const rowDate = new Date(queryDate);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          if (currentDateFilter === 'today') {
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            show = show && rowDate >= today && rowDate < tomorrow;
+          } else if (currentDateFilter === '7days') {
+            const sevenDaysAgo = new Date(today);
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            show = show && rowDate >= sevenDaysAgo;
+          } else if (currentDateFilter === '30days') {
+            const thirtyDaysAgo = new Date(today);
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            show = show && rowDate >= thirtyDaysAgo;
+          } else if (currentDateFilter === 'custom') {
+            if (customDateFrom) {
+              show = show && rowDate >= new Date(customDateFrom);
+            }
+            if (customDateTo) {
+              const toDate = new Date(customDateTo);
+              toDate.setHours(23, 59, 59, 999);
+              show = show && rowDate <= toDate;
+            }
+          }
+        }
+        
+        row.style.display = show ? '' : 'none';
+        
+        if (show) {
+          clientVisibleQueries++;
+        }
+      });
+      
+      // Update stats if this client has visible queries
+      if (clientVisibleQueries > 0) {
+        visibleClientsSet.add(clientIp);
+        totalVisibleQueries += clientVisibleQueries;
+      }
+      
+      // Update per-client badge
+      const badge = panel.querySelector('.client-query-count');
+      if (badge) {
+        badge.innerText = clientVisibleQueries + ' queries';
+      }
+      
+      // Hide client panel if no queries match
+      panel.style.display = clientVisibleQueries > 0 ? '' : 'none';
+      
+      // Update pagination for this panel
+      updatePagination(panel);
+    });
+    
+    // Update header stats
+    if (totalQueriesEl) totalQueriesEl.innerText = totalVisibleQueries;
+    if (uniqueClientsEl) uniqueClientsEl.innerText = visibleClientsSet.size;
+  }
+  
+  // Helper function to check if a row matches current filters
+  function rowMatchesFilters(row) {
+    const queryType = row.getAttribute('data-query-type');
+    const queryDate = row.getAttribute('data-query-date');
+    let show = true;
+    
+    // Type filter
+    if (currentTypeFilter === 'a-only') {
+      show = show && queryType === 'A';
+    } else if (currentTypeFilter === 'aaaa-only') {
+      show = show && queryType === 'AAAA';
+    }
+    
+    // Date filter
+    if (show && currentDateFilter !== 'all') {
+      const rowDate = new Date(queryDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (currentDateFilter === 'today') {
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        show = show && rowDate >= today && rowDate < tomorrow;
+      } else if (currentDateFilter === '7days') {
+        const sevenDaysAgo = new Date(today);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        show = show && rowDate >= sevenDaysAgo;
+      } else if (currentDateFilter === '30days') {
+        const thirtyDaysAgo = new Date(today);
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        show = show && rowDate >= thirtyDaysAgo;
+      } else if (currentDateFilter === 'custom') {
+        if (customDateFrom) {
+          show = show && rowDate >= new Date(customDateFrom);
+        }
+        if (customDateTo) {
+          const toDate = new Date(customDateTo);
+          toDate.setHours(23, 59, 59, 999);
+          show = show && rowDate <= toDate;
+        }
+      }
+    }
+    
+    return show;
+  }
+  
+  // Pagination function
+  function updatePagination(panel) {
+    const clientIp = panel.getAttribute('data-client-ip');
+    const rows = Array.from(panel.querySelectorAll('tbody tr'));
+    const visibleRows = rows.filter(rowMatchesFilters);
+    const itemsPerPage = getItemsPerPage(clientIp);
+    const totalPages = Math.ceil(visibleRows.length / itemsPerPage);
+    
+    // Initialize pagination state if not exists
+    if (!paginationState.has(clientIp)) {
+      paginationState.set(clientIp, 1);
+    }
+    if (!itemsPerPageState.has(clientIp)) {
+      itemsPerPageState.set(clientIp, 50);
+    }
+    
+    let currentPage = paginationState.get(clientIp);
+    
+    // Ensure current page is valid
+    if (currentPage > totalPages && totalPages > 0) {
+      currentPage = totalPages;
+      paginationState.set(clientIp, currentPage);
+    }
+    if (currentPage < 1) {
+      currentPage = 1;
+      paginationState.set(clientIp, currentPage);
+    }
+    
+    // Show/hide rows based on filters and current page
+    let visibleIndex = 0;
+    rows.forEach((row) => {
+      if (rowMatchesFilters(row)) {
+        const pageNumber = Math.floor(visibleIndex / itemsPerPage) + 1;
+        if (pageNumber === currentPage) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+        visibleIndex++;
+      } else {
+        row.style.display = 'none';
+      }
+    });
+    
+    // Update pagination controls
+    const paginationControls = panel.querySelector('.pagination-controls');
+    const prevBtn = panel.querySelector('.pagination-prev');
+    const nextBtn = panel.querySelector('.pagination-next');
+    const pageInfo = panel.querySelector('.pagination-info');
+    
+    // Hide pagination if showing all items or only one page
+    if (itemsPerPageState.get(clientIp) === 'all' || totalPages <= 1) {
+      paginationControls.style.display = 'none';
+    } else {
+      paginationControls.style.display = 'block';
+      pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+      
+      prevBtn.disabled = currentPage === 1;
+      nextBtn.disabled = currentPage === totalPages;
+      
+      prevBtn.style.opacity = currentPage === 1 ? '0.5' : '1';
+      nextBtn.style.opacity = currentPage === totalPages ? '0.5' : '1';
+    }
+  }
+  
+  // Initialize pagination for all panels
+  document.querySelectorAll('.dns-client-panel').forEach(panel => {
+    const clientIp = panel.getAttribute('data-client-ip');
+    const prevBtn = panel.querySelector('.pagination-prev');
+    const nextBtn = panel.querySelector('.pagination-next');
+    
+    prevBtn.addEventListener('click', function() {
+      let currentPage = paginationState.get(clientIp) || 1;
+      if (currentPage > 1) {
+        paginationState.set(clientIp, currentPage - 1);
+        updatePagination(panel);
+      }
+    });
+    
+    nextBtn.addEventListener('click', function() {
+      let currentPage = paginationState.get(clientIp) || 1;
+      paginationState.set(clientIp, currentPage + 1);
+      updatePagination(panel);
+    });
+    
+    // Items per page selector
+    const itemsPerPageSelect = panel.querySelector('.items-per-page-select');
+    itemsPerPageSelect.addEventListener('change', function() {
+      const value = this.value;
+      itemsPerPageState.set(clientIp, value);
+      paginationState.set(clientIp, 1); // Reset to first page
+      updatePagination(panel);
+    });
+    
+    // Initial pagination setup
+    updatePagination(panel);
+  });
+
+  
+  // Query Type Filter
+  typeFilterButtons.forEach(button => {
+    button.addEventListener('click', function() {
+      currentTypeFilter = this.getAttribute('data-filter');
+      
+      typeFilterButtons.forEach(btn => btn.classList.remove('btn-primary', 'active'));
+      typeFilterButtons.forEach(btn => btn.classList.add('btn-default'));
+      this.classList.remove('btn-default');
+      this.classList.add('btn-primary', 'active');
+      
+      applyFilters();
+    });
+  });
+  
+  // Date Range Filter
+  dateFilterButtons.forEach(button => {
+    button.addEventListener('click', function() {
+      currentDateFilter = this.getAttribute('data-date-filter');
+      
+      dateFilterButtons.forEach(btn => btn.classList.remove('btn-primary', 'active'));
+      dateFilterButtons.forEach(btn => btn.classList.add('btn-default'));
+      this.classList.remove('btn-default');
+      this.classList.add('btn-primary', 'active');
+      
+      customDateToggle.classList.remove('btn-primary');
+      customDateToggle.classList.add('btn-default');
+      customDateRange.style.display = 'none';
+      
+      applyFilters();
+    });
+  });
+  
+  // Custom Date Toggle
+  customDateToggle.addEventListener('click', function() {
+    if (customDateRange.style.display === 'none') {
+      customDateRange.style.display = 'block';
+      this.classList.remove('btn-default');
+      this.classList.add('btn-primary');
+      
+      dateFilterButtons.forEach(btn => btn.classList.remove('btn-primary', 'active'));
+      dateFilterButtons.forEach(btn => btn.classList.add('btn-default'));
+    } else {
+      customDateRange.style.display = 'none';
+      this.classList.remove('btn-primary');
+      this.classList.add('btn-default');
+    }
+  });
+  
+  // Apply Custom Date
+  applyCustomBtn.addEventListener('click', function() {
+    customDateFrom = dateFromInput.value;
+    customDateTo = dateToInput.value;
+    
+    if (customDateFrom || customDateTo) {
+      currentDateFilter = 'custom';
+      applyFilters();
+    }
+  });
+  
+  // Clear Custom Date
+  clearCustomBtn.addEventListener('click', function() {
+    dateFromInput.value = '';
+    dateToInput.value = '';
+    customDateFrom = null;
+    customDateTo = null;
+    currentDateFilter = 'all';
+    
+    customDateRange.style.display = 'none';
+    customDateToggle.classList.remove('btn-primary');
+    customDateToggle.classList.add('btn-default');
+    
+    dateFilterButtons[0].click(); // Click "All"
+  });
+});
+</script>
+{% endif %}
