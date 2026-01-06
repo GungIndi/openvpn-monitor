@@ -88,7 +88,8 @@ class ConfigLoader(object):
             'enable_dns_logs',
             'dns_log_file',
             'dns_log_hours',
-            'dns_log_limit'
+            'dns_log_limit',
+            'ipp_path'
         ]
         for var in global_vars:
             try:

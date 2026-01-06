@@ -163,6 +163,7 @@ def openvpn_monitor_wsgi():
         dns_log_file = settings.get('dns_log_file', '/var/log/dnsmasq/vpn.log')
         dns_log_hours = int(settings.get('dns_log_hours', 24))
         dns_log_limit = int(settings.get('dns_log_limit', 500))
+        ipp_path = settings.get('ipp_path', '/usr/local/etc/openvpn/ipp.txt')
         return dict(
             site=site,
             logo=logo,
@@ -175,6 +176,7 @@ def openvpn_monitor_wsgi():
             dns_log_file=dns_log_file,
             dns_log_hours=dns_log_hours,
             dns_log_limit=dns_log_limit,
+            ipp_path=ipp_path,
         )
 
     @app.route('/images/logo', methods=['GET'])
